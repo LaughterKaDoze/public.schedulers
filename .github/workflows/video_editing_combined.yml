@@ -27,6 +27,9 @@ jobs:
           sparse-checkout: |
             counter_video_editing.py
             counter_video_editing.txt
+            video_end_tracker.txt
+            kaggle_rotation.py
+            kaggle_account_tracker.txt
           fetch-depth: 1
 
       # Set up Python for counter scripts
