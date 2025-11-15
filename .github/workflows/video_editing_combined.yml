@@ -27,6 +27,7 @@ jobs:
           sparse-checkout: |
             counter_video_editing.py
             counter_video_editing.txt
+            VIDEO_EDITING_QUALITY
             video_end_tracker.txt
             kaggle_rotation.py
             kaggle_account_tracker.txt
