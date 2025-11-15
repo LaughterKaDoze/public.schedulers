@@ -27,7 +27,6 @@ jobs:
           sparse-checkout: |
             counter_video_editing.py
             counter_video_editing.txt
-            VIDEO_EDITING_QUALITY
             video_end_tracker.txt
             kaggle_rotation.py
             kaggle_account_tracker.txt
@@ -53,45 +52,29 @@ jobs:
         id: kaggle_rotation
         run: |
           python3 kaggle_rotation.py
-          KAGGLE_FILE=$(cat kaggle_account_tracker.txt)
-          echo "kaggle_file=$KAGGLE_FILE" >> $GITHUB_OUTPUT
-          echo "Using Kaggle config: $KAGGLE_FILE"
+          ACCOUNT_NUM=$(cat kaggle_account_tracker.txt)
+          echo "account_number=$ACCOUNT_NUM" >> $GITHUB_OUTPUT
+          echo "Using Kaggle account: $ACCOUNT_NUM"
           
-          # Extract the number from kaggle file (kaggle.json -> 0, kaggle1.json -> 1, etc.)
-          if [ "$KAGGLE_FILE" = "kaggle.json" ]; then
-            KAGGLE_NUM=""
-          else
-            KAGGLE_NUM=$(echo $KAGGLE_FILE | sed 's/kaggle\([0-9]*\)\.json/\1/')
-          fi
-          
-          # Dynamically get the username and key from secrets
-          if [ -z "$KAGGLE_NUM" ]; then
-            KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}"
-            KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}"
-          else
-            SECRET_USERNAME_VAR="KAGGLE_USERNAME_${KAGGLE_NUM}"
-            SECRET_KEY_VAR="KAGGLE_KEY_${KAGGLE_NUM}"
-            
-            # Use bash variable indirection to get secret values
-            case $KAGGLE_NUM in
-              1)
-                KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_1 }}"
-                KAGGLE_KEY="${{ secrets.KAGGLE_KEY_1 }}"
-                ;;
-              2)
-                KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_2 }}"
-                KAGGLE_KEY="${{ secrets.KAGGLE_KEY_2 }}"
-                ;;
-              3)
-                KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_3 }}"
-                KAGGLE_KEY="${{ secrets.KAGGLE_KEY_3 }}"
-                ;;
-              *)
-                echo "Unknown Kaggle account number: $KAGGLE_NUM"
-                exit 1
-                ;;
-            esac
-          fi
+          # Dynamically get the username and key from secrets based on account number
+          case $ACCOUNT_NUM in
+            0)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}"
+              ;;
+            1)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_1 }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_1 }}"
+              ;;
+            2)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_2 }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_2 }}"
+              ;;
+            *)
+              echo "Unknown Kaggle account number: $ACCOUNT_NUM"
+              exit 1
+              ;;
+          esac
           
           echo "kaggle_username=$KAGGLE_USERNAME" >> $GITHUB_OUTPUT
           echo "kaggle_key=$KAGGLE_KEY" >> $GITHUB_OUTPUT
