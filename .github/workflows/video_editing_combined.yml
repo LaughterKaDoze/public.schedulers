@@ -14,9 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       video_number: ${{ steps.increment.outputs.video_number }}
-      kaggle_file: ${{ steps.kaggle_rotation.outputs.kaggle_file }}
-      kaggle_username: ${{ steps.kaggle_rotation.outputs.kaggle_username }}
-      kaggle_key: ${{ steps.kaggle_rotation.outputs.kaggle_key }}
     steps:
       # Checkout repository
       - name: Checkout Code
@@ -28,8 +25,6 @@ jobs:
             counter_video_editing.py
             counter_video_editing.txt
             video_end_tracker.txt
-            kaggle_rotation.py
-            kaggle_account_tracker.txt
           fetch-depth: 1
 
       # Set up Python for counter scripts
@@ -47,46 +42,13 @@ jobs:
           echo "video_number=$VIDEO_NUMBER" >> $GITHUB_OUTPUT
           echo "Updated video editing counter to: $VIDEO_NUMBER"
 
-      # Rotate Kaggle account
-      - name: Rotate Kaggle Account
-        id: kaggle_rotation
-        run: |
-          python3 kaggle_rotation.py
-          ACCOUNT_NUM=$(cat kaggle_account_tracker.txt)
-          echo "account_number=$ACCOUNT_NUM" >> $GITHUB_OUTPUT
-          echo "Using Kaggle account: $ACCOUNT_NUM"
-          
-          # Dynamically get the username and key from secrets based on account number
-          case $ACCOUNT_NUM in
-            0)
-              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME }}"
-              KAGGLE_KEY="${{ secrets.KAGGLE_KEY }}"
-              ;;
-            1)
-              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_1 }}"
-              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_1 }}"
-              ;;
-            2)
-              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_2 }}"
-              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_2 }}"
-              ;;
-            *)
-              echo "Unknown Kaggle account number: $ACCOUNT_NUM"
-              exit 1
-              ;;
-          esac
-          
-          echo "kaggle_username=$KAGGLE_USERNAME" >> $GITHUB_OUTPUT
-          echo "kaggle_key=$KAGGLE_KEY" >> $GITHUB_OUTPUT
-          echo "Kaggle Username: $KAGGLE_USERNAME"
-
-      # Commit updated counter and tracker files
-      - name: Commit Counter Updates
+      # Commit updated counter file
+      - name: Commit Counter Update
         run: |
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
-          git add counter_video_editing.txt kaggle_account_tracker.txt
-          git commit -m "Update video editing counter and Kaggle rotation tracker" || echo "No changes to commit"
+          git add counter_video_editing.txt
+          git commit -m "Update video editing counter" || echo "No changes to commit"
           git pull --rebase origin main || echo "No changes to pull"
           git push || echo "No changes to push"
 
@@ -106,12 +68,52 @@ jobs:
             counter_video_editing.txt
             video_end_tracker.txt
             requirements.txt
+            kaggle_account_tracker.txt
           fetch-depth: 1
 
       # Pull latest changes (includes updated counter)
       - name: Pull Latest Changes
         run: |
           git pull origin main
+
+      # Read current Kaggle account number
+      - name: Read Kaggle Account Number
+        id: read_kaggle_account
+        run: |
+          ACCOUNT_NUM=$(cat kaggle_account_tracker.txt)
+          echo "account_number=$ACCOUNT_NUM" >> $GITHUB_OUTPUT
+          echo "📌 Current Kaggle account number: $ACCOUNT_NUM"
+
+      # Set Kaggle credentials based on account number
+      - name: Set Kaggle Credentials
+        id: set_kaggle_creds
+        run: |
+          ACCOUNT_NUM=${{ steps.read_kaggle_account.outputs.account_number }}
+          
+          # Dynamically get the username and key from secrets based on account number
+          case $ACCOUNT_NUM in
+            1)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_1 }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_1 }}"
+              ;;
+            2)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_2 }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_2 }}"
+              ;;
+            3)
+              KAGGLE_USERNAME="${{ secrets.KAGGLE_USERNAME_3 }}"
+              KAGGLE_KEY="${{ secrets.KAGGLE_KEY_3 }}"
+              ;;
+            *)
+              echo "❌ Invalid account number: $ACCOUNT_NUM"
+              exit 1
+              ;;
+          esac
+          
+          echo "kaggle_username=$KAGGLE_USERNAME" >> $GITHUB_OUTPUT
+          echo "kaggle_key=$KAGGLE_KEY" >> $GITHUB_OUTPUT
+          echo "✅ Using Kaggle credentials for account $ACCOUNT_NUM"
+          echo "📝 Kaggle Username: $KAGGLE_USERNAME"
 
       # Configure Sparse Checkout for specific video
       - name: Configure Sparse Checkout
@@ -126,15 +128,16 @@ jobs:
       - name: Install Kaggle API
         run: pip install kaggle
 
-      # Configure Kaggle with rotated credentials
+      # Configure Kaggle with credentials
       - name: Configure Kaggle
         run: |
           mkdir -p ~/.kaggle
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
-          KAGGLE_KEY="${{ needs.update-counter.outputs.kaggle_key }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
+          KAGGLE_KEY="${{ steps.set_kaggle_creds.outputs.kaggle_key }}"
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
-          echo "Configured Kaggle for user: $KAGGLE_USERNAME"
+          echo "🔧 Configured Kaggle credentials"
+          echo "📝 Kaggle Username: $KAGGLE_USERNAME"
 
       # Prepare Dataset Folder
       - name: Prepare Dataset Folder
@@ -153,7 +156,7 @@ jobs:
           cp "VIDEOS/Video_${VIDEO_NUMBER}.mp4" kaggle-dataset/VIDEOS/ || echo "⚠️ Video file not found: VIDEOS/Video_${VIDEO_NUMBER}.mp4"
 
           # Kaggle dataset metadata
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           cat > kaggle-dataset/dataset-metadata.json <<EOF
           {
             "id": "$KAGGLE_USERNAME/video-editing-data",
@@ -168,7 +171,7 @@ jobs:
       # Create or Update Kaggle Dataset
       - name: Create or Update Kaggle Dataset
         run: |
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           for i in $(seq 1 5); do
             if kaggle datasets status $KAGGLE_USERNAME/video-editing-data >/dev/null 2>&1; then
               echo "✅ Dataset exists, versioning... (Attempt $i)"
@@ -196,7 +199,7 @@ jobs:
       # List datasets
       - name: List Datasets
         run: |
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           echo "📦 Listing datasets for user: $KAGGLE_USERNAME"
           sleep 60
           kaggle datasets list --user $KAGGLE_USERNAME
@@ -204,7 +207,7 @@ jobs:
       # Prepare Kernel Metadata
       - name: Prepare Kernel Metadata
         run: |
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           cat > kernel-metadata.json <<EOF
           {
             "id": "$KAGGLE_USERNAME/video-editing-scheduler-notebook",
@@ -231,7 +234,7 @@ jobs:
       # Wait for Kaggle Notebook to Finish
       - name: Wait for Kaggle Notebook to Finish
         run: |
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           KERNEL_ID="$KAGGLE_USERNAME/video-editing-scheduler-notebook"
           for i in $(seq 1 600); do
             STATUS=$(kaggle kernels status $KERNEL_ID)
@@ -251,7 +254,7 @@ jobs:
       # Download Notebook Outputs
       - name: Download Notebook Outputs
         run: |
-          KAGGLE_USERNAME="${{ needs.update-counter.outputs.kaggle_username }}"
+          KAGGLE_USERNAME="${{ steps.set_kaggle_creds.outputs.kaggle_username }}"
           kaggle kernels output $KAGGLE_USERNAME/video-editing-scheduler-notebook -p ./outputs
 
       # Copy Processed Videos
@@ -271,3 +274,45 @@ jobs:
           git commit -m "Update reels after Kaggle GPU notebook run (Video ${{ needs.update-counter.outputs.video_number }})" || echo "No changes"
           git pull --rebase origin main || echo "No changes"
           git push || echo "No changes"
+
+  rotate-kaggle:
+    needs: run-on-kaggle
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          repository: LaughterKaDoze/laughter.ka.doze
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          sparse-checkout: |
+            kaggle_rotation.py
+            kaggle_account_tracker.txt
+          fetch-depth: 1
+
+      # Pull latest changes
+      - name: Pull Latest Changes
+        run: git pull origin main
+
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.9'
+
+      # Rotate to next Kaggle account
+      - name: Rotate Kaggle Account
+        run: |
+          echo "🔄 Rotating Kaggle account for next workflow run..."
+          python3 kaggle_rotation.py
+          NEXT_ACCOUNT=$(cat kaggle_account_tracker.txt)
+          echo "✅ Next workflow will use Kaggle account: $NEXT_ACCOUNT"
+
+      # Commit rotation
+      - name: Commit Kaggle Rotation
+        run: |
+          git config --local user.name "github-actions"
+          git config --local user.email "github-actions@github.com"
+          git add kaggle_account_tracker.txt
+          git commit -m "Rotate Kaggle account tracker" || echo "No changes to commit"
+          git push || echo "No changes to push"
